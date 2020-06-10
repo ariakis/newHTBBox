@@ -1,0 +1,86 @@
+#!/bin/bash
+
+#
+# Simple script to create dir layout for new htb box and to do an initial scan on it's ip
+#
+# Usage: ./new_box {box name} {box IP}
+#
+# By flatwhite
+#
+
+if [ $# != 2 ]; then
+
+	echo "[?] Incorrect number of args."
+	echo "[-] Usage: $0 {box name} {box IP}"
+
+else
+
+	# define functions
+
+	function webserver_scan {
+		serverPort=$1
+		echo ""
+		echo "[!] Detected web service on port $serverPort!"
+		echo "[+] Starting wfuzz and nikto against $boxIP:$serverPort..."
+
+		xfce4-terminal -e "bash -c 'nikto -host $boxIP:$serverPort -output $boxName/1_scans/nikto.$serverPort -Format txt'" -T "Nikto on $boxIP:$serverPort ($boxName)" &
+		xfce4-terminal -e "bash -c 'wfuzz -c -L --hc 404,403 -u http://$boxIP:$serverPort/FUZZ -w /home/flatwhite/wordlists/custom-url-fuzz-words.txt -f $boxName/1_scans/wfuzz.$serverPort'" -T "Wfuzz on $boxIP:$serverPort ($boxName)" &
+
+		echo "[+] Opening firefox at http://$boxIP:$serverPort (so you can do something while the scans are running)"
+		firefox $boxIP:$serverPort &
+	}
+
+	# define vars
+
+
+	boxName=$1
+	boxIP=$2
+
+	if ! ping -c 1 $boxIP &> /dev/null; then
+		echo "[?] $boxName ($boxIP) isn't reachable. Are you sure it's up?"
+		exit
+	fi
+
+	clear
+	echo "[+] Starting setup..."
+	sleep 1
+	clear
+
+	echo "[+] Creating directory structure"
+	mkdir "$boxName"
+	mkdir "$boxName/1_scans"
+	mkdir "$boxName/2_foothold"
+	mkdir "$boxName/3_user"
+	mkdir "$boxName/4_root"
+
+	echo "[+] Creating IP reminder file"
+	echo "$boxIP" > "$boxName/ip"
+
+	echo "[+] Creating useful variables file"
+	echo "#!/bin/bash" > "$boxName/variables"
+	echo "export boxip='$boxIP'" >> "$boxName/variables"
+	echo "export boxname='$boxName'" >> "$boxName/variables"
+	chmod +x "$boxName/variables"
+
+	# Start the scans!
+
+	echo "[+] Starting nmap scan (all ports)"
+
+	xfce4-terminal -e "bash -c 'sudo nmap -v -sV -sS -p- -T4 -sC -oN $boxName/1_scans/nmap $boxIP'" -T "Nmap on $boxName" &
+
+	# check for webserver on common web ports
+	# TODO: add https support
+	for webport in 80 8080 ; do
+		if nc $boxIP $webport -z -w 3 &> /dev/null ; then
+
+			webserver_scan $webport
+
+		fi
+	done
+
+
+	echo ""
+	echo "[+] Everything setup and scanned! Follow the white rabbit, $USER... (cd $boxName)"
+	
+
+fi
