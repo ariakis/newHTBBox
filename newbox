@@ -8,79 +8,154 @@
 # By flatwhite
 #
 
-if [ $# != 2 ]; then
+# if alias not installed, install it (so we can cd into places automagically)
 
-	echo "[?] Incorrect number of args."
-	echo "[-] Usage: $0 {box name} {box IP}"
-
-else
-
-	# define functions
-
-	function webserver_scan {
-		serverPort=$1
-		echo ""
-		echo "[!] Detected web service on port $serverPort!"
-		echo "[+] Starting wfuzz and nikto against $boxIP:$serverPort..."
-
-		xfce4-terminal -e "bash -c 'nikto -host $boxIP:$serverPort -output $boxName/1_scans/nikto.$serverPort -Format txt'" -T "Nikto on $boxIP:$serverPort ($boxName)" &
-		xfce4-terminal -e "bash -c 'wfuzz -c -L --hc 404,403 -u http://$boxIP:$serverPort/FUZZ -w /home/flatwhite/wordlists/custom-url-fuzz-words.txt -f $boxName/1_scans/wfuzz.$serverPort'" -T "Wfuzz on $boxIP:$serverPort ($boxName)" &
-
-		echo "[+] Opening firefox at http://$boxIP:$serverPort (so you can do something while the scans are running)"
-		firefox $boxIP:$serverPort &
-	}
-
-	# define vars
-
-
-	boxName=$1
-	boxIP=$2
-
-	if ! ping -c 1 $boxIP &> /dev/null; then
-		echo "[?] $boxName ($boxIP) isn't reachable. Are you sure it's up?"
-		exit
-	fi
-
+function newboxheader() {
 	clear
-	echo "[+] Starting setup..."
-	sleep 1
-	clear
-
-	echo "[+] Creating directory structure"
-	mkdir "$boxName"
-	mkdir "$boxName/1_scans"
-	mkdir "$boxName/2_foothold"
-	mkdir "$boxName/3_user"
-	mkdir "$boxName/4_root"
-
-	echo "[+] Creating IP reminder file"
-	echo "$boxIP" > "$boxName/ip"
-
-	echo "[+] Creating useful variables file"
-	echo "#!/bin/bash" > "$boxName/variables"
-	echo "export boxip='$boxIP'" >> "$boxName/variables"
-	echo "export boxname='$boxName'" >> "$boxName/variables"
-	chmod +x "$boxName/variables"
-
-	# Start the scans!
-
-	echo "[+] Starting nmap scan (all ports)"
-
-	xfce4-terminal -e "bash -c 'sudo nmap -v -sV -sS -p- -T4 -sC -oN $boxName/1_scans/nmap $boxIP'" -T "Nmap on $boxName" &
-
-	# check for webserver on common web ports
-	# TODO: add https support
-	for webport in 80 8080 ; do
-		if nc $boxIP $webport -z -w 3 &> /dev/null ; then
-
-			webserver_scan $webport
-
-		fi
-	done
+	echo ICAgICAgICAgICAgICAgICAgICAgIF8gICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgfCB8ICAgICAgICAgICAgICAKICBfIF9fICAgX19fX18gICAgICBffCB8X18gICBfX19fXyAgX18KIHwgJ18gXCAvIF8gXCBcIC9cIC8gLyAnXyBcIC8gXyBcIFwvIC8KIHwgfCB8IHwgIF9fL1wgViAgViAvfCB8XykgfCAoXykgPiAgPCAKIHxffCB8X3xcX19ffCBcXy9cXy8gfF8uX18vIFxfX18vXy9cX1wKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKYnkgZmxhdHdoaXRlCg== | base64 -d
+	echo ''
+}
 
 
-	echo ""
-	echo "[+] Everything setup and scanned! Follow the white rabbit, $USER... (cd $boxName)"
-	
+# the following runs only the first time the script is called
+newboxAlias='alias newbox=". /usr/bin/newbox ; newboxFunction"'
+
+if ! grep 'alias newbox' ~/.bashrc &>/dev/null ; then
+	newboxheader
+
+	echo 'First run, setting up...'
+	echo ''
+
+	# Install bashrc alias
+	echo '' >> ~/.bashrc
+	echo "# newbox alias for flatwhite's newbox script so that cd can happen automagically" >> ~/.bashrc
+	echo $newboxAlias >>  ~/.bashrc
+	echo '' >> ~/.bashrc
+	echo '[+] Bashrc alias installed.'
+
+	# make data folder
+	cd ~
+	mkdir -p '.newbox-data'
+	cd - &> /dev/null
+	echo '[+] newbox-data directory created - store your cherrytree notes template in here. (~/.newbox-data/)'
+	echo ''
+	echo '[!] Setup complete, run again to start using!'
 
 fi
+
+
+function newboxFunction() {
+
+	newboxheader
+
+	if [ $# != 2 ]; then
+
+		echo "[?] Incorrect number of args."
+		echo "[-] Usage: $0 {box name} {box IP}"
+
+	else
+
+		# define functions
+
+		function webserver_scan {
+			serverPort=$1
+			echo ""
+			echo "[!] Detected web service on port $serverPort!"
+			echo "[+] Starting wfuzz and nikto against $boxIP:$serverPort..."
+
+			xfce4-terminal -e "bash -c 'nikto -host $boxIP:$serverPort -output $boxName/1_scans/nikto.$serverPort -Format txt'" -T "Nikto on $boxIP:$serverPort ($boxName)" &> /dev/null &
+			disown
+			xfce4-terminal -e "bash -c 'wfuzz -c -L --hc 404,403 -u http://$boxIP:$serverPort/FUZZ -w /home/flatwhite/wordlists/custom-url-fuzz-words.txt -f $boxName/1_scans/wfuzz.$serverPort'" -T "Wfuzz on $boxIP:$serverPort ($boxName)" &> /dev/null &
+			disown
+
+			echo "[+] Opening firefox at http://$boxIP:$serverPort (so you can do something while the scans are running)"
+			firefox $boxIP:$serverPort &> /dev/null &
+			disown
+		}
+
+		# define vars
+
+		boxName=$1
+		boxIP=$2
+
+		if ! ping -c 1 $boxIP &> /dev/null; then
+			echo "[?] $boxName ($boxIP) isn't reachable. Are you sure it's up?"
+			return 1
+		fi
+
+		echo "[+] Starting setup..."
+		sleep 1
+
+		echo "[+] Creating directory structure"
+		mkdir "$boxName"
+		mkdir "$boxName/1_scans"
+		mkdir "$boxName/2_foothold"
+		mkdir "$boxName/3_user"
+		mkdir "$boxName/4_root"
+
+		echo "[+] Creating IP reminder file"
+		echo "$boxIP" > "$boxName/ip"
+
+		echo "[+] Creating useful variables file"
+		echo "#!/bin/bash" > "$boxName/variables"
+		echo "export boxip='$boxIP'" >> "$boxName/variables"
+		echo "export boxname='$boxName'" >> "$boxName/variables"
+		chmod +x "$boxName/variables"
+
+		echo "[+] Copying newbox-data dir (e.g. useful scripts or notes files)"
+		cp -a ~/.newbox-data/. "$boxName"
+
+		# Start the scans!
+
+		echo "[+] Starting nmap scan (all ports)"
+
+		xfce4-terminal -e "bash -c 'sudo nmap -v -sV -sS -p- -T4 -sC -oN $boxName/1_scans/nmap $boxIP'" -T "Nmap on $boxName" &
+
+		# check for webserver on common web ports
+		# TODO: add https support
+
+		openBurp=0
+
+		# check if burp community is running
+		if ! pgrep java -a | grep BurpSuiteCommunity &> /dev/null ; then
+			echo "[!] Burp not running so will it start if a website is detected"
+			openBurp=1
+		fi
+
+		# scan common web ports for connection and if success, start burpsuite and further enum tools
+		for webport in 80 81 8080 ; do
+			if nc $boxIP $webport -z -w 3 &> /dev/null ; then
+				
+				webserver_scan $webport
+				
+				if [ $openBurp == 1 ] ; then
+
+					openBurp=0
+					echo "[+] Opening burp in case you need to intercept stuff"
+					~/BurpSuiteCommunity/BurpSuiteCommunity &> /dev/null &
+					disown
+
+				fi
+
+			fi
+		done
+
+		# open cherrytree notes if the file exists
+
+		if test -f "$boxName/notes.ctb" ; then
+			cherrytree $boxName/notes.ctb &>/dev/null &
+		fi
+
+
+		# import variables because useful
+		. $boxName/variables
+		echo "[+] Bash variables set (boxip=$boxip and boxname=$boxname)"
+		echo ""
+		echo "[+] Everything setup and started! Follow the white rabbit, $USER..."
+		cd $boxName
+
+		return 0
+		
+	fi
+
+}
